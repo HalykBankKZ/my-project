@@ -1,49 +1,115 @@
 "use client";
 import { useEffect, useState } from "react";
-import { signOut } from "next-auth/react";
+import Link from "next/link";
 
-export default function AdminPage() {
-  const [seeding, setSeeding] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
+interface School {
+  id: string;
+  name: string;
+  description?: string;
+  lifecycleStatus: string;
+  _count: { memberships: number };
+}
 
-  async function seed() {
-    setSeeding(true);
-    const res = await fetch("/api/seed", { method: "POST" });
-    const data = await res.json();
-    setResult(JSON.stringify(data, null, 2));
-    setSeeding(false);
-  }
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  draft: { label: "Черновик", color: "bg-gray-100 text-gray-600" },
+  active: { label: "Активна", color: "bg-green-100 text-green-700" },
+  completed: { label: "Завершена", color: "bg-blue-100 text-blue-700" },
+  archived: { label: "Архив", color: "bg-yellow-100 text-yellow-700" },
+};
+
+export default function AdminHome() {
+  const [schools, setSchools] = useState<School[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/schools")
+      .then((r) => r.json())
+      .then((d) => { setSchools(Array.isArray(d) ? d : []); setLoading(false); });
+  }, []);
+
+  const active = schools.filter((s) => s.lifecycleStatus === "active");
+  const totalMembers = schools.reduce((s, sc) => s + sc._count.memberships, 0);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">🛠️ Панель администратора</h1>
-          <button onClick={() => signOut({ callbackUrl: "/auth/login" })} className="text-red-600 text-sm">Выйти</button>
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Панель администратора</h1>
+          <p className="text-gray-500 mt-0.5">Управление школами и пользователями</p>
         </div>
+        <Link
+          href="/admin/schools"
+          className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition"
+        >
+          + Создать школу
+        </Link>
+      </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-4">
-          <h2 className="font-semibold mb-3">Демо-данные</h2>
-          <p className="text-sm text-gray-500 mb-4">Заполнить базу тестовыми школой, студентами, заданиями и медалями.</p>
-          <button
-            onClick={seed}
-            disabled={seeding}
-            className="bg-indigo-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-60"
-          >
-            {seeding ? "Заполняю..." : "Заполнить демо-данными"}
-          </button>
-          {result && (
-            <pre className="mt-4 text-xs bg-gray-50 p-3 rounded-lg overflow-auto max-h-48">{result}</pre>
-          )}
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-3xl font-bold text-gray-900">{schools.length}</p>
+          <p className="text-sm text-gray-500 mt-1">Всего школ</p>
         </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-3xl font-bold text-green-600">{active.length}</p>
+          <p className="text-sm text-gray-500 mt-1">Активных школ</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-3xl font-bold text-indigo-600">{totalMembers}</p>
+          <p className="text-sm text-gray-500 mt-1">Участников</p>
+        </div>
+      </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-semibold mb-3">Навигация</h2>
-          <div className="space-y-2">
-            <a href="/student" className="block text-indigo-600 hover:underline">→ Кабинет студента</a>
-            <a href="/trainer" className="block text-indigo-600 hover:underline">→ Кабинет тренера</a>
+      {/* Schools list */}
+      <div>
+        <h2 className="font-semibold text-gray-800 mb-3">Ваши школы</h2>
+        {loading ? (
+          <div className="flex items-center justify-center h-32 bg-white rounded-xl border border-gray-200">
+            <div className="w-6 h-6 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
           </div>
-        </div>
+        ) : schools.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
+            <p className="text-4xl mb-3">🏫</p>
+            <p className="text-gray-600 font-medium">Нет школ</p>
+            <p className="text-gray-400 text-sm mt-1">Создайте первую школу</p>
+            <Link
+              href="/admin/schools"
+              className="mt-4 inline-block bg-indigo-600 text-white px-5 py-2 rounded-lg font-medium"
+            >
+              Создать школу
+            </Link>
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {schools.map((s) => {
+              const st = STATUS_LABELS[s.lifecycleStatus];
+              return (
+                <Link
+                  key={s.id}
+                  href={`/admin/schools/${s.id}`}
+                  className="bg-white rounded-xl border border-gray-200 p-5 flex items-center justify-between hover:border-indigo-300 hover:shadow-sm transition"
+                >
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-gray-900">{s.name}</h3>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${st.color}`}>
+                        {st.label}
+                      </span>
+                    </div>
+                    {s.description && (
+                      <p className="text-sm text-gray-500">{s.description}</p>
+                    )}
+                    <p className="text-xs text-gray-400 mt-1">
+                      👥 {s._count.memberships} участников
+                    </p>
+                  </div>
+                  <span className="text-gray-400">→</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

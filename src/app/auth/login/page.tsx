@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -68,7 +69,14 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg text-xs text-gray-500">
+          <p className="text-center text-sm text-gray-500 mt-5">
+            Нет аккаунта?{" "}
+            <Link href="/auth/register" className="text-indigo-600 hover:underline font-medium">
+              Зарегистрироваться
+            </Link>
+          </p>
+
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg text-xs text-gray-500">
             <p className="font-medium mb-1">Демо-доступ:</p>
             <p>student@growvibe.kz / student123</p>
             <p>teacher@growvibe.kz / teacher123</p>

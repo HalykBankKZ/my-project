@@ -1,0 +1,348 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Tenancy & People ───────────────────────────────────────────────────────
+
+enum SchoolStatus {
+  draft
+  active
+  completed
+  archived
+}
+
+model School {
+  id              String       @id @default(cuid())
+  name            String
+  description     String?
+  lifecycleStatus SchoolStatus @default(draft)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  memberships      Membership[]
+  cohorts          Cohort[]
+  courses          Course[]
+  rankingSnapshots RankingSnapshot[]
+  xpLedger         XPLedger[]
+
+  @@map("schools")
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  city      String?
+  createdAt DateTime @default(now())
+
+  users User[]
+
+  @@map("branches")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  avatarUrl    String?
+  branchId     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  branch           Branch?           @relation(fields: [branchId], references: [id])
+  memberships      Membership[]
+  enrollments      Enrollment[]
+  submissions      Submission[]
+  gradesGiven      Grade[]           @relation("GradedBy")
+  streaks          Streak[]
+  medals           UserMedal[]
+  xpLedger         XPLedger[]
+  knowledgeReviews KnowledgeReview[]
+  activityEvents   ActivityEvent[]
+  rankingSnapshots RankingSnapshot[]
+
+  @@map("users")
+}
+
+enum MembershipRole {
+  student
+  teacher
+  admin
+}
+
+model Membership {
+  id       String         @id @default(cuid())
+  userId   String
+  schoolId String
+  role     MembershipRole
+
+  user   User   @relation(fields: [userId], references: [id])
+  school School @relation(fields: [schoolId], references: [id])
+
+  @@unique([userId, schoolId])
+  @@map("memberships")
+}
+
+model Cohort {
+  id        String   @id @default(cuid())
+  name      String
+  schoolId  String
+  createdAt DateTime @default(now())
+
+  school      School       @relation(fields: [schoolId], references: [id])
+  enrollments Enrollment[]
+  missions    Mission[]
+
+  @@map("cohorts")
+}
+
+model Enrollment {
+  id       String @id @default(cuid())
+  userId   String
+  cohortId String
+
+  user   User   @relation(fields: [userId], references: [id])
+  cohort Cohort @relation(fields: [cohortId], references: [id])
+
+  @@unique([userId, cohortId])
+  @@map("enrollments")
+}
+
+// ─── Content ────────────────────────────────────────────────────────────────
+
+model Topic {
+  id          String  @id @default(cuid())
+  title       String
+  description String?
+
+  materials        Material[]
+  missionTopics    MissionTopic[]
+  knowledgeReviews KnowledgeReview[]
+
+  @@map("topics")
+}
+
+model Material {
+  id        String   @id @default(cuid())
+  title     String
+  url       String?
+  content   String?
+  topicId   String
+  createdAt DateTime @default(now())
+
+  topic Topic @relation(fields: [topicId], references: [id])
+
+  @@map("materials")
+}
+
+model Course {
+  id       String @id @default(cuid())
+  name     String
+  schoolId String
+
+  school  School   @relation(fields: [schoolId], references: [id])
+  modules Module[]
+  streaks Streak[]
+
+  @@map("courses")
+}
+
+model Module {
+  id       String @id @default(cuid())
+  name     String
+  order    Int
+  courseId String
+
+  course   Course    @relation(fields: [courseId], references: [id])
+  missions Mission[]
+
+  @@map("modules")
+}
+
+enum MissionType {
+  homework_manual
+  test_auto
+  hybrid
+}
+
+model Mission {
+  id       String      @id @default(cuid())
+  title    String
+  type     MissionType
+  deadline DateTime
+  moduleId String
+  cohortId String?
+
+  module      Module         @relation(fields: [moduleId], references: [id])
+  cohort      Cohort?        @relation(fields: [cohortId], references: [id])
+  topics      MissionTopic[]
+  submissions Submission[]
+
+  @@map("missions")
+}
+
+model MissionTopic {
+  missionId String
+  topicId   String
+
+  mission Mission @relation(fields: [missionId], references: [id])
+  topic   Topic   @relation(fields: [topicId], references: [id])
+
+  @@id([missionId, topicId])
+  @@map("mission_topics")
+}
+
+// ─── Submission & Grading ───────────────────────────────────────────────────
+
+enum SubmissionStatus {
+  not_started
+  in_progress
+  submitted
+  under_review
+  needs_rework
+  resubmitted
+  graded
+}
+
+model Submission {
+  id          String           @id @default(cuid())
+  userId      String
+  missionId   String
+  status      SubmissionStatus @default(not_started)
+  content     String?
+  autoScore   Float?
+  submittedAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id])
+  mission Mission @relation(fields: [missionId], references: [id])
+  grade   Grade?
+
+  @@unique([userId, missionId])
+  @@map("submissions")
+}
+
+model Grade {
+  id           String   @id @default(cuid())
+  submissionId String   @unique
+  gradedById   String
+  score        Float
+  feedback     String?
+  rubric       Json?
+  gradedAt     DateTime @default(now())
+
+  submission Submission @relation(fields: [submissionId], references: [id])
+  gradedBy   User       @relation("GradedBy", fields: [gradedById], references: [id])
+
+  @@map("grades")
+}
+
+// ─── Knowledge Review (Spaced Repetition) ──────────────────────────────────
+
+model KnowledgeReview {
+  id           String    @id @default(cuid())
+  userId       String
+  topicId      String
+  nextReviewAt DateTime
+  interval     Int       @default(14)
+  lastResult   Float?
+  updatedAt    DateTime  @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id])
+  topic Topic @relation(fields: [topicId], references: [id])
+
+  @@unique([userId, topicId])
+  @@map("knowledge_reviews")
+}
+
+// ─── Gamification ──────────────────────────────────────────────────────────
+
+model XPLedger {
+  id        String   @id @default(cuid())
+  userId    String
+  schoolId  String
+  amount    Int
+  reason    String
+  sourceRef String?
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  school School @relation(fields: [schoolId], references: [id])
+
+  @@map("xp_ledger")
+}
+
+model Streak {
+  id            String    @id @default(cuid())
+  userId        String
+  courseId      String
+  current       Int       @default(0)
+  best          Int       @default(0)
+  lastEventDate DateTime?
+  frozenCount   Int       @default(0)
+
+  user   User   @relation(fields: [userId], references: [id])
+  course Course @relation(fields: [courseId], references: [id])
+
+  @@unique([userId, courseId])
+  @@map("streaks")
+}
+
+model MedalDefinition {
+  id          String @id @default(cuid())
+  key         String @unique
+  name        String
+  description String
+  emoji       String
+  xpReward    Int    @default(0)
+
+  userMedals UserMedal[]
+
+  @@map("medal_definitions")
+}
+
+model UserMedal {
+  id                String   @id @default(cuid())
+  userId            String
+  medalDefinitionId String
+  earnedAt          DateTime @default(now())
+
+  user            User            @relation(fields: [userId], references: [id])
+  medalDefinition MedalDefinition @relation(fields: [medalDefinitionId], references: [id])
+
+  @@unique([userId, medalDefinitionId])
+  @@map("user_medals")
+}
+
+model RankingSnapshot {
+  id         String   @id @default(cuid())
+  userId     String
+  schoolId   String
+  scope      String
+  rankScore  Float
+  position   Int
+  percentile Float
+  snapshotAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  school School @relation(fields: [schoolId], references: [id])
+
+  @@map("ranking_snapshots")
+}
+
+model ActivityEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("activity_events")
+}

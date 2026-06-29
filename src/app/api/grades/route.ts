@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     where: { submission: { userId: submission.userId } },
   });
   if (allGrades.length >= 3) {
-    const avg = allGrades.reduce((s, g) => s + g.score, 0) / allGrades.length;
+    const avg = allGrades.reduce((s: number, g) => s + g.score, 0) / allGrades.length;
     if (avg >= 90) await awardMedalIfNew(submission.userId, schoolId, "avg_90");
   }
 
